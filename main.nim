@@ -1,50 +1,71 @@
 import encodings
 import os
-import strformat
+from strformat import fmt
 import unicode
 
 import dialogs
-import nimx / [ window, layout, button, popup_button, text_field ]
+import nimx / [ button, layout, popup_button, text_field, window ]
 
 const TOOL_NAME = "changeExtension"
-const SEMANTIC_VERSION = "0.0.1"
+const SEMANTIC_VERSION = "0.0.2"
 
 
 proc onChooseDir(field: TextField) =
+  let initPath =
+    if field.text != "" and os.dirExists(field.text):
+      field.text
+    else:
+      "./"
+  echo fmt("initPath: {initPath}")
   let dirPath =
     when defined(windows):
-      dialogs.chooseDir(nil, "./").convert("UTF-8", "shift_jis")
+      dialogs.chooseDir(nil, initPath).convert("UTF-8", "shift_jis")
     else:
-      dialogs.chooseDir(nil, "./")
-  echo strformat.fmt("{dirPath}")
+      dialogs.chooseDir(nil, initPath)
+  echo fmt("{dirPath}")
   if unicode.validateUtf8(dirPath) >= 0:
-    echo strformat.fmt("Invalid UTF-8 strings: {dirPath}")
+    echo fmt("Invalid UTF-8 strings: {dirPath}")
     return
 
   field.text = dirPath
 
 
-proc onExecute(field: TextField, ext: string, newExt: string) =
-  echo strformat.fmt("Execute {TOOL_NAME} - v{SEMANTIC_VERSION}")
-  echo strformat.fmt("Base dir: {field.text}")
-  echo strformat.fmt("{ext} -> {newExt}")
+proc onMakeDir(pathField: TextField, newDirField: TextField) =
+  if newDirField.text == "":
+    echo fmt("Empty dir name.")
+    return
+  let newDirPath = os.joinPath(pathField.text, newDirField.text)
+  if os.dirExists(newDirPath):
+    echo fmt("Dir {newDirPath} is already exists.")
+    return
+  try:
+    os.createDir(newDirPath)
+    echo fmt("Created {newDirPath}")
+  except OSError:
+    echo fmt("Failed to make dir {newDirPath}.")
 
-  let pattern = strformat.fmt("{field.text}{os.DirSep}*.{ext}")
+
+proc onExecute(field: TextField, ext: string, newExt: string) =
+  echo fmt("Execute {TOOL_NAME} - v{SEMANTIC_VERSION}")
+  echo fmt("Base dir: {field.text}")
+  echo fmt("{ext} -> {newExt}")
+
+  let pattern = fmt("{field.text}{os.DirSep}*.{ext}")
   echo pattern
 
   for filePath in os.walkFiles(pattern):
     let newFilePath = os.changeFileExt(filePath, newExt)
     try:
       os.moveFile(filePath, newFilePath)
-      echo strformat.fmt("Changed extension: {filePath} -> {newFilePath}")
+      echo fmt("Changed extension: {filePath} -> {newFilePath}")
     except OSError:
-      echo strformat.fmt("Failed to rename: {filePath} -> {newFilePath}")
+      echo fmt("Failed to rename: {filePath} -> {newFilePath}")
   echo "Done.\n"
 
 
 proc startApp() =
-  let window = newWindow(newRect(50, 50, 700, 150))
-  window.title=strformat.fmt("{TOOL_NAME} - v{SEMANTIC_VERSION}")
+  let window = newWindow(newRect(50, 50, 900, 100))
+  window.title=fmt("{TOOL_NAME} - v{SEMANTIC_VERSION}")
   window.makeLayout:
     - Label as label:
       left == super.left
@@ -53,10 +74,16 @@ proc startApp() =
       height == 20
       text: "Target dir"
 
-    - TextField as textField:
+    - TextField as pathTextField:
       left == prev.right + 2
       top == prev.top
-      width == 300
+      width == 400
+      height == 20
+    
+    - TextField as newDirTextField:
+      left == prev.right + 2
+      top == prev.top
+      width == 60
       height == 20
     
     - PopupButton as extensions:
@@ -79,15 +106,23 @@ proc startApp() =
       width == 100
       height == 20
       title: "Browse"
-      onAction: onChooseDir(textField)
+      onAction: onChooseDir(pathTextField)
+    
+    - Button as makeDirButton:
+      left == prev.right + 2
+      top == prev.top
+      width == 100
+      height == 20
+      title: "Make Dir"
+      onAction: onMakeDir(pathTextField, newDirTextField)
 
     - Button as executeButton:
       left == prev.right + 2
       top == prev.top
       width == 100
       height == 20
-      title: "Execute"
-      onAction: onExecute(textField, extensions.selectedItem(), newExtensions.selectedItem())
+      title: "Change Ext"
+      onAction: onExecute(pathTextField, extensions.selectedItem(), newExtensions.selectedItem())
 
 
 runApplication:
